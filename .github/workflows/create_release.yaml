@@ -1,0 +1,77 @@
+name: create-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version number'
+        required: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+  
+    - uses: xmake-io/github-action-setup-xmake@v1
+      with:
+        xmake-version: latest
+        build-cache: true
+
+    - name: Build with Xmake
+      run: |
+        xmake f -m release
+        xmake build -v
+
+    - uses: robinraju/release-downloader@v1.11
+      with:
+        repository: "ThirteenAG/Ultimate-ASI-Loader"
+        latest: true
+        fileName: "Ultimate-ASI-Loader_x64.zip"
+
+    - name: Prepare Ultimate ASI Loader
+      run: |
+        unzip Ultimate-ASI-Loader_x64.zip -d ./
+        C:\msys64\usr\bin\wget.exe -O ./UltimateASILoader_LICENSE.md https://raw.githubusercontent.com/ThirteenAG/Ultimate-ASI-Loader/master/license
+        
+    - name: Create Directory Structure
+      run: |
+        mkdir ./zip/
+
+    - name: Prepare Release Files
+      run: |
+        cp build/windows/x64/release/${{ github.event.repository.name }}.asi ./zip/
+        cp ${{ github.event.repository.name }}.ini ./zip/
+        cp dinput8.dll ./zip/dinput8.dll        
+        cp UltimateASILoader_LICENSE.md ./zip/
+        New-Item -Path "./zip/EXTRACT_TO_GAME_FOLDER" -ItemType File
+    
+    - name: Create Release Zip
+      run: |
+        cd ./zip; Compress-Archive -Path ./* -DestinationPath ../${{ github.event.repository.name }}_${{ github.event.inputs.version }}.zip
+
+    - name: Update release_body.md
+      run: |
+        $releaseBody = "release_body.md"
+        $zipName = "${{ github.event.repository.name }}_${{ github.event.inputs.version }}.zip" 
+        (Get-Content $releaseBody -Raw) -replace '<RELEASE_ZIP_NAME>', $zipName | Set-Content $releaseBody
+        
+    - uses: ncipollo/release-action@v1
+      with:
+        artifacts: "${{ github.event.repository.name }}_${{ github.event.inputs.version }}.zip"
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ github.event.inputs.version }}
+        name: "${{ github.event.inputs.version }}"
+        draft: true
+        bodyFile: "release_body.md"
+        generateReleaseNotes: false
+        artifactErrorsFailBuild: true
