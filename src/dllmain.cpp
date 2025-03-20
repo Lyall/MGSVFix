@@ -41,10 +41,15 @@ float fHUDHeightOffset;
 bool bUnlockFPS;
 bool bFixResolution;
 bool bFixHUD;
+bool bLODTweaks;
+int iTerrainDistance;
+float fModelDistance;
+float fGrassDistance;
 
 // Variables
 int iCurrentResX;
 int iCurrentResY;
+bool bIsMoviePlaying;
 
 // Game info
 struct GameInfo
@@ -176,11 +181,19 @@ void Configuration()
     inipp::get_value(ini.sections["Unlock Framerate"], "Enabled", bUnlockFPS);
     inipp::get_value(ini.sections["Fix Resolution"], "Enabled", bFixResolution);
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
+    inipp::get_value(ini.sections["LOD Tweaks"], "Enabled", bLODTweaks);
+    inipp::get_value(ini.sections["LOD Tweaks"], "TerrainDistance", iTerrainDistance);
+    inipp::get_value(ini.sections["LOD Tweaks"], "ModelDistance", fModelDistance);
+    inipp::get_value(ini.sections["LOD Tweaks"], "GrassDistance", fGrassDistance);
 
     // Log ini parse
     spdlog_confparse(bUnlockFPS);
     spdlog_confparse(bFixResolution);
     spdlog_confparse(bFixHUD);
+    spdlog_confparse(bLODTweaks);
+    spdlog_confparse(iTerrainDistance);
+    spdlog_confparse(fModelDistance);
+    spdlog_confparse(fGrassDistance);
 
     spdlog::info("----------");
 }
@@ -208,7 +221,7 @@ void CurrentResolution()
         // GZ/TPP: Current resolution
         std::uint8_t* CurrentResolutionScanResult = Memory::PatternScan(exeModule, "48 89 ?? ?? 48 8B ?? ?? 48 ?? ?? ?? ?? ?? ?? ?? ?? B8 01 00 00 00 48 ?? ?? ??");
         if (CurrentResolutionScanResult) {
-            spdlog::info("GZ/TPP: Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), CurrentResolutionScanResult - (std::uint8_t*)exeModule);
+            spdlog::info("GZ/TPP: Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), CurrentResolutionScanResult - (std::uint8_t*)exeModule);             
             static SafetyHookMid CurrentResolutionMidHook{};
             CurrentResolutionMidHook = safetyhook::create_mid(CurrentResolutionScanResult,
                 [](SafetyHookContext& ctx) {
@@ -223,6 +236,15 @@ void CurrentResolution()
                         CalculateAspectRatio(true);
                     }
                 });
+
+                // Adjust framerate setting
+                static SafetyHookMid FramerateSettingMidHook{};
+                FramerateSettingMidHook = safetyhook::create_mid(CurrentResolutionScanResult - 0x8,
+                    [](SafetyHookContext& ctx) {
+                        if (bUnlockFPS) {
+                            //ctx.rax = 0x00009E7769C788E4; // Variable = 0x00009E7769C788E4. Limited30 = 0000C5A0FE4F5128. Auto = 0x0000373A4C315329.
+                        }
+                    });
         }
         else {
             spdlog::error("GZ/TPP: Current Resolution: Pattern scan failed.");
@@ -344,11 +366,11 @@ void HUD()
             }
 
             // TPP: Fix sonar markers
-            std::uint8_t* SonarMarkersScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? 48 83 ?? ??");
-            if (SonarMarkersScanResult) {
-                spdlog::info("TPP: HUD: Sonar Markers: Address is {:s}+{:x}", sExeName.c_str(), SonarMarkersScanResult - (std::uint8_t*)exeModule);
-                static SafetyHookMid SonarMarkersMidHook{};
-                SonarMarkersMidHook = safetyhook::create_mid(SonarMarkersScanResult,
+            std::uint8_t* ViewportScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? 48 83 ?? ??");
+            if (ViewportScanResult) {
+                spdlog::info("TPP: HUD: Sonar Markers: Address is {:s}+{:x}", sExeName.c_str(), ViewportScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid ViewportMidHook{};
+                ViewportMidHook = safetyhook::create_mid(ViewportScanResult,
                     [](SafetyHookContext& ctx) {
                         if (fAspectRatio > fNativeAspect)
                             ctx.xmm0.f32[0] *= fAspectMultiplier;
@@ -371,6 +393,13 @@ void HUD()
             static SafetyHookMid HUDBackgroundsMidHook{};
             HUDBackgroundsMidHook = safetyhook::create_mid(HUDBackgroundsScanResult,
                 [](SafetyHookContext& ctx) {
+                    // Resize HUD to counteract viewport scaling when a movie plays
+                    if (bIsMoviePlaying) {
+                        if (fAspectRatio > fNativeAspect && ctx.xmm0.f32[0] > 1.00f) {
+                            ctx.xmm0.f32[0] *= fAspectMultiplier;
+                        }
+                    }
+
                     if (fAspectRatio > fNativeAspect) {
                         // TODO: Find a better way of identifying the HUD object.
 
@@ -415,9 +444,62 @@ void HUD()
     }
 }
 
+void Movies()
+{
+    if (bFixHUD) 
+    {
+        if (eGameType == Game::TPP) {
+            // TPP: Adjust movie frame
+            std::uint8_t* MovieFrameScanResult = Memory::PatternScan(exeModule, "72 ?? 44 0F ?? ?? 72 ?? 41 0F ?? ?? F3 41 ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 76 ??");
+            if (MovieFrameScanResult) {
+                spdlog::info("TPP: HUD: Movie Frame: Address is {:s}+{:x}", sExeName.c_str(), MovieFrameScanResult - (std::uint8_t*)exeModule);
+                Memory::PatchBytes(MovieFrameScanResult, "\xEB", 1);
+            }
+            else {
+                spdlog::error("TPP: HUD: Movie Frame: Pattern scan failed.");
+            }
+
+            // TPP: Movie status
+            std::uint8_t* MovieStatusScanResult = Memory::PatternScan(exeModule, "8B ?? ?? ?? ?? ?? FF ?? 0F 84 ?? ?? ?? ?? FF ?? 0F 84 ?? ?? ?? ?? FF ?? 74 ?? 48 8D ?? ?? ?? ?? ?? 33 ??");
+            if (MovieStatusScanResult) {
+                spdlog::info("TPP: HUD: Movie Status: Address is {:s}+{:x}", sExeName.c_str(), MovieStatusScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid MovieStatusMidHook{};
+                MovieStatusMidHook = safetyhook::create_mid(MovieStatusScanResult,
+                    [](SafetyHookContext& ctx) {
+                        // Playing/paused
+                        if (ctx.rax == 1 || ctx.rax == 2)
+                            bIsMoviePlaying = true;
+                        else
+                            bIsMoviePlaying = false;
+                    });
+            }
+            else {
+                spdlog::error("TPP: HUD: Movie Status: Pattern scan failed.");
+            }
+
+            // TPP: Viewport
+            std::uint8_t* ViewportScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? F3 0F ?? ?? 0F ?? ?? 73 ?? 41 0F ?? ?? 41 ?? ?? 44 ?? ?? F3 0F ?? ?? F3 0F ?? ??");
+            if (ViewportScanResult) {
+                spdlog::info("TPP: HUD: Viewport: Address is {:s}+{:x}", sExeName.c_str(), ViewportScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid ViewportMidHook{};
+                ViewportMidHook = safetyhook::create_mid(ViewportScanResult,
+                    [](SafetyHookContext& ctx) {
+                        if (bIsMoviePlaying) {
+                            if (fAspectRatio > fNativeAspect)
+                                ctx.xmm1.f32[0] = fHUDWidth;
+                        }
+                    });
+            }
+            else {
+                spdlog::error("TPP: HUD: Viewport: Pattern scan failed.");
+            }
+        }
+    }  
+}
+
 void Framerate()
 {
-    if (bUnlockFPS) 
+    if (bUnlockFPS)
     {
         if (eGameType == Game::GZ || eGameType == Game::TPP) {
             // GZ/TPP: Force "variable" framerate setting
@@ -449,7 +531,37 @@ void Framerate()
                 spdlog::error("GZ: Throwable Framerate Bug: Pattern scan failed.");
             }
         }
-    } 
+    }
+}
+
+void Graphics()
+{
+    if (bLODTweaks)
+    {
+        if (eGameType == Game::TPP) {
+            // TPP: LOD tweaks
+            std::uint8_t* LODFactorResolutionScanResult = Memory::PatternScan(exeModule, "8B ?? ?? ?? ?? ?? 4C 8B ?? ?? ?? ?? ?? 85 ?? 75 ?? 8B ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
+            std::uint8_t* ModelQualityScanResult = Memory::PatternScan(exeModule, "89 ?? ?? B0 01 C3 8B ?? ?? C6 ?? ?? 00 89 ?? ?? B0 01 C3");
+            if (LODFactorResolutionScanResult && ModelQualityScanResult) { 
+                spdlog::info("TPP: Graphics: LOD: LOD Factor Resolution: Address is {:s}+{:x}", sExeName.c_str(), LODFactorResolutionScanResult - (std::uint8_t*)exeModule);
+                std::uint8_t* LODFactorResolution = Memory::GetAbsolute(LODFactorResolutionScanResult + 0x2);
+                Memory::Write(LODFactorResolution, iTerrainDistance);
+    
+                spdlog::info("TPP: Graphics: LOD: Model/Grass LOD Distance: Address is {:s}+{:x}", sExeName.c_str(), ModelQualityScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid ModelQualityMidHook{};
+                ModelQualityMidHook = safetyhook::create_mid(ModelQualityScanResult,
+                    [](SafetyHookContext& ctx) {
+                        if (ctx.rbx == 9)
+                            ctx.rax = *(uint32_t*)&fGrassDistance;
+                        else
+                            ctx.rax = *(uint32_t*)&fModelDistance;
+                    });
+            }
+            else {
+                spdlog::error("TPP: Graphics: LOD: Pattern scan(s) failed.");
+            }
+        }
+    }   
 }
 
 DWORD __stdcall Main(void*)
@@ -461,7 +573,9 @@ DWORD __stdcall Main(void*)
         CurrentResolution();
         Resolution();
         HUD();
+        Movies();
         Framerate();
+        Graphics();
     }
     return true;
 }
