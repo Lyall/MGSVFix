@@ -242,7 +242,7 @@ void CurrentResolution()
                 FramerateSettingMidHook = safetyhook::create_mid(CurrentResolutionScanResult - 0x8,
                     [](SafetyHookContext& ctx) {
                         if (bUnlockFPS) {
-                            //ctx.rax = 0x00009E7769C788E4; // Variable = 0x00009E7769C788E4. Limited30 = 0000C5A0FE4F5128. Auto = 0x0000373A4C315329.
+                            ctx.rax = 0x00009E7769C788E4; // Variable = 0x00009E7769C788E4. Limited30 = 0000C5A0FE4F5128. Auto = 0x0000373A4C315329.
                         }
                     });
         }
