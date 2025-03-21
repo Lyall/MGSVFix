@@ -312,6 +312,101 @@ void HUD()
 {
     if (bFixHUD) 
     {
+        if (eGameType == Game::GZ || eGameType == Game::TPP) {
+            // GZ/TPP: Throwable marker
+            std::uint8_t* ThrowableMarkerScanResult = Memory::PatternScan(exeModule, "E8 ?? ?? ?? ?? F3 0F ?? ?? ?? ?? 66 0F ?? ?? 66 0F ?? ?? 41 ?? ?? ?? 4C ?? ?? ?? ?? BA 01 00 00 00");
+            if (ThrowableMarkerScanResult) {
+                spdlog::info("GZ/TPP: HUD: Throwable Marker: Address is {:s}+{:x}", sExeName.c_str(), ThrowableMarkerScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid ThrowableMarkerMidHook{};
+                ThrowableMarkerMidHook = safetyhook::create_mid(ThrowableMarkerScanResult + 0x5,
+                    [](SafetyHookContext& ctx) {
+                        if (fAspectRatio > fNativeAspect)
+                            ctx.xmm7.f32[0] = fAspectMultiplier;
+                    });
+            }
+            else {
+                spdlog::error("GZ/TPP: HUD: Throwable Marker: Pattern scan failed.");
+            }
+
+            // GZ/TPP: Fix lens effects (flares, dirt etc)
+            std::uint8_t* LensEffectsScanResult = Memory::PatternScan(exeModule, "0F 28 ?? F3 ?? 0F ?? ?? ?? ?? ?? ?? F3 45 ?? ?? ?? ?? F3 45 ?? ?? ?? F3 44 ?? ?? ?? ?? E8 ?? ?? ?? ??");
+            if (LensEffectsScanResult) {
+                spdlog::info("GZ/TPP: HUD: Lens Effects: Address is {:s}+{:x}", sExeName.c_str(), LensEffectsScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid LensEffectsMidHook{};
+                LensEffectsMidHook = safetyhook::create_mid(LensEffectsScanResult + 0x3,
+                    [](SafetyHookContext& ctx) {
+                        if (fAspectRatio > fNativeAspect) {
+                            ctx.xmm13.f32[0] = fAspectRatio;
+                            ctx.xmm9.f32[0] /= fAspectMultiplier;
+                        }
+                    });
+            }
+            else {
+                spdlog::error("GZ/TPP: HUD: Lens Effects: Pattern scan failed.");
+            }
+
+            // GZ/TPP: Span backgrounds
+            std::uint8_t* HUDBackgroundsScanResult = nullptr;
+            if (eGameType == Game::GZ)
+                HUDBackgroundsScanResult = Memory::PatternScan(exeModule, "41 0F ?? ?? 8B ?? ?? F6 ?? ?? 0F 84 ?? ?? ?? ?? 44 ?? ?? 41 ?? ?? ?? 41 ?? ?? ?? 74 ??");
+            else if (eGameType == Game::TPP)
+                HUDBackgroundsScanResult = Memory::PatternScan(exeModule, "F6 41 ?? 01 74 ?? 0F ?? ?? ?? 0F ?? ?? ?? 44 0F ?? ?? ?? 41 ?? ?? ??");
+                
+            if (HUDBackgroundsScanResult) {
+                spdlog::info("GZ/TPP: HUD: Backgrounds: Address is {:s}+{:x}", sExeName.c_str(), HUDBackgroundsScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid HUDBackgroundsMidHook{};
+                HUDBackgroundsMidHook = safetyhook::create_mid(HUDBackgroundsScanResult,
+                    [](SafetyHookContext& ctx) {
+                        // Resize HUD to counteract viewport scaling when a movie plays
+                        if (bIsMoviePlaying) {
+                            if (fAspectRatio > fNativeAspect && ctx.xmm0.f32[0] > 1.00f) {
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+                            }
+                        }
+
+                        if (fAspectRatio > fNativeAspect) {
+                            // TODO: Find a better way of identifying the HUD object.
+
+                            // ui_sys_cmn_bg
+                            if (ctx.xmm0.f32[0] == 2048.00f && ctx.xmm0.f32[1] == 1152.00f)
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+
+                            // Cutscene skip BG
+                            if (ctx.xmm0.f32[0] == 2000.00f && ctx.xmm0.f32[1] == 1125.00f)
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+
+                            // Loadout BG
+                            if (ctx.xmm0.f32[0] == 1400.00f && ctx.xmm0.f32[1] == 1400.00f)
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+
+                            // Mission failed BGs
+                            if (ctx.xmm0.f32[0] == 1500.00f && ctx.xmm0.f32[1] == 1500.00f)
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+                            if ((ctx.xmm0.f32[0] > 1882.00f && ctx.xmm0.f32[0] < 1884.00f) && (ctx.xmm0.f32[1] > 1059.00f && ctx.xmm0.f32[1] < 1061.00f))
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+                            if ((ctx.xmm0.f32[0] > 1770.00f && ctx.xmm0.f32[0] < 1772.00f) && (ctx.xmm0.f32[1] > 995.00f && ctx.xmm0.f32[1] < 997.00f))
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+
+                            // Scope fade
+                            if (ctx.xmm0.f32[0] == 1400.00f && ctx.xmm0.f32[1] == 1280.00f)
+                                ctx.xmm0.f32[0] *= fAspectMultiplier;
+
+                            // Scope frame
+                            if (ctx.xmm0.f32[0] == 1500.00f && ctx.xmm0.f32[1] == 1000.00f)
+                                *reinterpret_cast<float*>(ctx.rcx + 0x740) = fAspectRatio / 2.00f; // Set the overall width scale
+                        }
+                        else {
+                            // Scope frame
+                            if (ctx.xmm0.f32[0] == 1500.00f && ctx.xmm0.f32[1] == 1000.00f)
+                                *reinterpret_cast<float*>(ctx.rcx + 0x740) = 1.00f; // Reset in-case the resolution has changed.
+                        }
+                    });
+            }
+            else {
+                spdlog::error("GZ/TPP: HUD: Backgrounds: Pattern scan failed.");
+            }
+        }
+
         if (eGameType == Game::TPP) {
             // TPP: Fix incorrectly positioned markers
             std::uint8_t* MarkersScanResult = Memory::PatternScan(exeModule, "48 81 ?? ?? ?? ?? ?? E9 ?? ?? ?? ?? 48 8B ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
@@ -379,67 +474,6 @@ void HUD()
             else {
                 spdlog::error("TPP: HUD: Sonar Markers: Pattern scan failed.");
             }
-        }
-
-        // Span backgrounds
-        std::uint8_t* HUDBackgroundsScanResult = nullptr;
-        if (eGameType == Game::GZ)
-            HUDBackgroundsScanResult = Memory::PatternScan(exeModule, "41 0F ?? ?? 8B ?? ?? F6 ?? ?? 0F 84 ?? ?? ?? ?? 44 ?? ?? 41 ?? ?? ?? 41 ?? ?? ?? 74 ??");
-        else if (eGameType == Game::TPP)
-            HUDBackgroundsScanResult = Memory::PatternScan(exeModule, "F6 41 ?? 01 74 ?? 0F ?? ?? ?? 0F ?? ?? ?? 44 0F ?? ?? ?? 41 ?? ?? ??");
-            
-        if (HUDBackgroundsScanResult) {
-            spdlog::info("GZ/TPP: HUD: Backgrounds: Address is {:s}+{:x}", sExeName.c_str(), HUDBackgroundsScanResult - (std::uint8_t*)exeModule);
-            static SafetyHookMid HUDBackgroundsMidHook{};
-            HUDBackgroundsMidHook = safetyhook::create_mid(HUDBackgroundsScanResult,
-                [](SafetyHookContext& ctx) {
-                    // Resize HUD to counteract viewport scaling when a movie plays
-                    if (bIsMoviePlaying) {
-                        if (fAspectRatio > fNativeAspect && ctx.xmm0.f32[0] > 1.00f) {
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-                        }
-                    }
-
-                    if (fAspectRatio > fNativeAspect) {
-                        // TODO: Find a better way of identifying the HUD object.
-
-                        // ui_sys_cmn_bg
-                        if (ctx.xmm0.f32[0] == 2048.00f && ctx.xmm0.f32[1] == 1152.00f)
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-
-                        // Cutscene skip BG
-                        if (ctx.xmm0.f32[0] == 2000.00f && ctx.xmm0.f32[1] == 1125.00f)
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-
-                        // Loadout BG
-                        if (ctx.xmm0.f32[0] == 1400.00f && ctx.xmm0.f32[1] == 1400.00f)
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-
-                        // Mission failed BGs
-                        if (ctx.xmm0.f32[0] == 1500.00f && ctx.xmm0.f32[1] == 1500.00f)
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-                        if ((ctx.xmm0.f32[0] > 1882.00f && ctx.xmm0.f32[0] < 1884.00f) && (ctx.xmm0.f32[1] > 1059.00f && ctx.xmm0.f32[1] < 1061.00f))
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-                        if ((ctx.xmm0.f32[0] > 1770.00f && ctx.xmm0.f32[0] < 1772.00f) && (ctx.xmm0.f32[1] > 995.00f && ctx.xmm0.f32[1] < 997.00f))
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-
-                        // Scope fade
-                        if (ctx.xmm0.f32[0] == 1400.00f && ctx.xmm0.f32[1] == 1280.00f)
-                            ctx.xmm0.f32[0] *= fAspectMultiplier;
-
-                        // Scope frame
-                        if (ctx.xmm0.f32[0] == 1500.00f && ctx.xmm0.f32[1] == 1000.00f)
-                            *reinterpret_cast<float*>(ctx.rcx + 0x740) = fAspectRatio / 2.00f; // Set the overall width scale
-                    }
-                    else {
-                        // Scope frame
-                        if (ctx.xmm0.f32[0] == 1500.00f && ctx.xmm0.f32[1] == 1000.00f)
-                            *reinterpret_cast<float*>(ctx.rcx + 0x740) = 1.00f; // Reset in-case the resolution has changed.
-                    }
-                });
-        }
-        else {
-            spdlog::error("GZ/TPP: HUD: Backgrounds: Pattern scan failed.");
         }
     }
 }
@@ -539,15 +573,23 @@ void Graphics()
     if (bLODTweaks)
     {
         if (eGameType == Game::TPP) {
-            // TPP: LOD tweaks
+            // TPP: LOD factor resolution
             std::uint8_t* LODFactorResolutionScanResult = Memory::PatternScan(exeModule, "8B ?? ?? ?? ?? ?? 4C 8B ?? ?? ?? ?? ?? 85 ?? 75 ?? 8B ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ??");
-            std::uint8_t* ModelQualityScanResult = Memory::PatternScan(exeModule, "89 ?? ?? B0 01 C3 8B ?? ?? C6 ?? ?? 00 89 ?? ?? B0 01 C3");
-            if (LODFactorResolutionScanResult && ModelQualityScanResult) { 
+            if (LODFactorResolutionScanResult) { 
                 spdlog::info("TPP: Graphics: LOD: LOD Factor Resolution: Address is {:s}+{:x}", sExeName.c_str(), LODFactorResolutionScanResult - (std::uint8_t*)exeModule);
                 std::uint8_t* LODFactorResolution = Memory::GetAbsolute(LODFactorResolutionScanResult + 0x2);
                 Memory::Write(LODFactorResolution, iTerrainDistance);
-    
-                spdlog::info("TPP: Graphics: LOD: Model/Grass LOD Distance: Address is {:s}+{:x}", sExeName.c_str(), ModelQualityScanResult - (std::uint8_t*)exeModule);
+            }
+            else {
+                spdlog::error("TPP: Graphics: LOD: LOD Factor Resolution: Pattern scan failed.");
+            }
+        }
+
+        if (eGameType == Game::GZ || eGameType == Game::TPP) {
+            // GZ/TPP: Model quality
+            std::uint8_t* ModelQualityScanResult = Memory::PatternScan(exeModule, "89 ?? 64 B0 01 C3 8B ?? ?? C6 ?? ?? 00 89 ?? ?? B0 01 C3");
+            if (ModelQualityScanResult) { 
+                spdlog::info("GZ/TPP: Graphics: LOD: Model/Grass LOD Distance: Address is {:s}+{:x}", sExeName.c_str(), ModelQualityScanResult - (std::uint8_t*)exeModule);
                 static SafetyHookMid ModelQualityMidHook{};
                 ModelQualityMidHook = safetyhook::create_mid(ModelQualityScanResult,
                     [](SafetyHookContext& ctx) {
@@ -558,7 +600,7 @@ void Graphics()
                     });
             }
             else {
-                spdlog::error("TPP: Graphics: LOD: Pattern scan(s) failed.");
+                spdlog::error("GZ/TPP: Graphics: LOD: Model/Grass LOD Distance: Pattern scan failed.");
             }
         }
     }   
