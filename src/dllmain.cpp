@@ -601,6 +601,22 @@ void Graphics()
             }
         }
 
+        if (eGameType == Game::GZ) {
+            // GZ: LOD factor resolution
+            std::uint8_t* LODFactorResolutionScanResult = Memory::PatternScan(exeModule, "66 0F ?? ?? ?? ?? ?? ?? 0F 29 ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? 0F 5B ??");
+            if (LODFactorResolutionScanResult) { 
+                spdlog::info("GZ: Graphics: LOD: LOD Factor Resolution:  Address is {:s}+{:x}", sExeName.c_str(), LODFactorResolutionScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid LODFactorResolutionMidHook{};
+                LODFactorResolutionMidHook = safetyhook::create_mid(LODFactorResolutionScanResult + 0x8,
+                    [](SafetyHookContext& ctx) {
+                        ctx.xmm3.u16[0] = iTerrainDistance;
+                    });
+            }
+            else {
+                spdlog::error("GZ: Graphics: LOD: LOD Factor Resolution: Pattern scan failed.");
+            }
+        }
+
         if (eGameType == Game::GZ || eGameType == Game::TPP) {
             // GZ/TPP: Model quality
             std::uint8_t* ModelQualityScanResult = Memory::PatternScan(exeModule, "89 ?? 64 B0 01 C3 8B ?? ?? C6 ?? ?? 00 89 ?? ?? B0 01 C3");
