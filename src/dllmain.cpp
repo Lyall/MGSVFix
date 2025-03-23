@@ -345,12 +345,16 @@ void AspectRatio()
                 spdlog::error("GZ/TPP: Lens Effects: Pattern scan failed.");
             }
 
-            // GZ/TPP: Fix depth of field                                          
-            std::uint8_t* DepthOfFieldScanResult = Memory::PatternScan(exeModule, "0F 5B ?? F3 0F ?? ?? ?? ?? ?? ?? 0F 14 ?? 0F 14 ?? ?? ?? ?? ?? 44 0F ?? ??");
-            if (!DepthOfFieldScanResult) {
+            // GZ/TPP: Fix depth of field 
+            std::uint8_t* DepthOfFieldScanResult = nullptr;   
+            if (eGameType == Game::GZ)                                      
+                DepthOfFieldScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 0F ?? ?? ?? ?? ?? ?? 44 0F ?? ?? F3 44 ?? ?? ??");
+            else if (eGameType == Game::TPP)
+                DepthOfFieldScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 0F ?? ?? 0F ?? ?? 0F ?? ?? ?? 0F ?? ?? ?? 0F ?? ?? ?? 44 0F ?? ??");
+            if (DepthOfFieldScanResult) {
                 spdlog::info("GZ/TPP: Depth of Field: Address is {:s}+{:x}", sExeName.c_str(), DepthOfFieldScanResult - (std::uint8_t*)exeModule);
                 static SafetyHookMid DepthOfFieldMidHook{};
-                DepthOfFieldMidHook = safetyhook::create_mid(DepthOfFieldScanResult + 0x3,
+                DepthOfFieldMidHook = safetyhook::create_mid(DepthOfFieldScanResult,
                     [](SafetyHookContext& ctx) {
                         if (fAspectRatio > fNativeAspect) {
                             ctx.xmm6.f32[0] = (fHUDWidth * 0.85f) * (1.00f / 1920.00f);
