@@ -45,6 +45,7 @@ bool bLODTweaks;
 int iTerrainDistance;
 float fModelDistance;
 float fGrassDistance;
+float fGameplayFOVMulti;
 
 // Variables
 int iCurrentResX;
@@ -185,6 +186,10 @@ void Configuration()
     inipp::get_value(ini.sections["LOD Tweaks"], "TerrainDistance", iTerrainDistance);
     inipp::get_value(ini.sections["LOD Tweaks"], "ModelDistance", fModelDistance);
     inipp::get_value(ini.sections["LOD Tweaks"], "GrassDistance", fGrassDistance);
+    //inipp::get_value(ini.sections["Gameplay FOV"], "Multiplier", fGameplayFOVMulti);
+
+    // Clamp settings
+    //fGameplayFOVMulti = std::clamp(fGameplayFOVMulti, 0.10f, 3.00f);
 
     // Log ini parse
     spdlog_confparse(bUnlockFPS);
@@ -194,6 +199,7 @@ void Configuration()
     spdlog_confparse(iTerrainDistance);
     spdlog_confparse(fModelDistance);
     spdlog_confparse(fGrassDistance);
+    //spdlog_confparse(fGameplayFOVMulti);
 
     spdlog::info("----------");
 }
@@ -236,15 +242,6 @@ void CurrentResolution()
                         CalculateAspectRatio(true);
                     }
                 });
-
-                // Adjust framerate setting
-                static SafetyHookMid FramerateSettingMidHook{};
-                FramerateSettingMidHook = safetyhook::create_mid(CurrentResolutionScanResult - 0x8,
-                    [](SafetyHookContext& ctx) {
-                        if (bUnlockFPS) {
-                            ctx.rax = 0x00009E7769C788E4; // Variable = 0x00009E7769C788E4. Limited30 = 0000C5A0FE4F5128. Auto = 0x0000373A4C315329.
-                        }
-                    });
         }
         else {
             spdlog::error("GZ/TPP: Current Resolution: Pattern scan failed.");
@@ -600,12 +597,11 @@ void Graphics()
                 spdlog::error("TPP: Graphics: LOD: LOD Factor Resolution: Pattern scan failed.");
             }
         }
-
-        if (eGameType == Game::GZ) {
+        else if (eGameType == Game::GZ) {
             // GZ: LOD factor resolution
             std::uint8_t* LODFactorResolutionScanResult = Memory::PatternScan(exeModule, "66 0F ?? ?? ?? ?? ?? ?? 0F 29 ?? ?? 0F 28 ?? F3 0F ?? ?? ?? ?? ?? ?? 0F 5B ??");
             if (LODFactorResolutionScanResult) { 
-                spdlog::info("GZ: Graphics: LOD: LOD Factor Resolution:  Address is {:s}+{:x}", sExeName.c_str(), LODFactorResolutionScanResult - (std::uint8_t*)exeModule);
+                spdlog::info("GZ: Graphics: LOD: LOD Factor Resolution: Address is {:s}+{:x}", sExeName.c_str(), LODFactorResolutionScanResult - (std::uint8_t*)exeModule);
                 static SafetyHookMid LODFactorResolutionMidHook{};
                 LODFactorResolutionMidHook = safetyhook::create_mid(LODFactorResolutionScanResult + 0x8,
                     [](SafetyHookContext& ctx) {
@@ -638,6 +634,55 @@ void Graphics()
     }   
 }
 
+void FOV()
+{
+    if (fGameplayFOVMulti != 1.00f)
+    {
+        if (eGameType == Game::GZ) {
+            // GZ: Gameplay FOV
+            std::uint8_t* GameplayFOVScanResult = Memory::PatternScan(exeModule, "89 ?? ?? ?? ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 0F 28 ?? 0F 28 ??");
+            if (GameplayFOVScanResult) { 
+                spdlog::info("GZ: Gameplay FOV: Address is {:s}+{:x}", sExeName.c_str(), GameplayFOVScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid GameplayFOVMidHook{};
+                GameplayFOVMidHook = safetyhook::create_mid(GameplayFOVScanResult,
+                    [](SafetyHookContext& ctx) {   
+                        float fov = *reinterpret_cast<float*>(&ctx.rax);
+                        
+                        // Don't change scope FOV
+                        if (fov != 36.00f)
+                            fov /= fGameplayFOVMulti;
+    
+                        ctx.rax = *(uint32_t*)&fov;
+                    });
+            }
+            else {
+                spdlog::error("GZ: Gameplay FOV: Pattern scan failed.");
+            }
+        }
+        else if (eGameType == Game::TPP) {
+            // TPP: Gameplay FOV
+            std::uint8_t* GameplayFOVScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 41 0F ?? ??");
+            if (GameplayFOVScanResult) { 
+                spdlog::info("TPP: Gameplay FOV: Address is {:s}+{:x}", sExeName.c_str(), GameplayFOVScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid GameplayFOVMidHook{};
+                GameplayFOVMidHook = safetyhook::create_mid(GameplayFOVScanResult + 0x8,
+                    [](SafetyHookContext& ctx) {
+                        float fov = ctx.xmm1.f32[0];
+                        
+                        // Don't change scope/ADS FOV
+                        if (fov != 36.00f && fov != 29.00f)
+                            fov /= fGameplayFOVMulti;
+    
+                        ctx.xmm1.f32[0] = fov;
+                    });
+            }
+            else {
+                spdlog::error("TPP: Gameplay FOV: Pattern scan failed.");
+            }
+        }
+    }   
+}
+
 DWORD __stdcall Main(void*)
 {
     Logging();
@@ -650,6 +695,7 @@ DWORD __stdcall Main(void*)
         Movies();
         Framerate();
         Graphics();
+        //FOV();
     }
     return true;
 }
