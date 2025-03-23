@@ -40,6 +40,7 @@ float fHUDHeightOffset;
 // Ini variables
 bool bUnlockFPS;
 bool bFixResolution;
+bool bFixAspect;
 bool bFixHUD;
 bool bLODTweaks;
 int iTerrainDistance;
@@ -181,6 +182,7 @@ void Configuration()
     // Load settings from ini
     inipp::get_value(ini.sections["Unlock Framerate"], "Enabled", bUnlockFPS);
     inipp::get_value(ini.sections["Fix Resolution"], "Enabled", bFixResolution);
+    inipp::get_value(ini.sections["Fix Aspect"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
     inipp::get_value(ini.sections["LOD Tweaks"], "Enabled", bLODTweaks);
     inipp::get_value(ini.sections["LOD Tweaks"], "TerrainDistance", iTerrainDistance);
@@ -194,6 +196,7 @@ void Configuration()
     // Log ini parse
     spdlog_confparse(bUnlockFPS);
     spdlog_confparse(bFixResolution);
+    spdlog_confparse(bFixAspect);
     spdlog_confparse(bFixHUD);
     spdlog_confparse(bLODTweaks);
     spdlog_confparse(iTerrainDistance);
@@ -305,15 +308,15 @@ void Resolution()
     } 
 }
 
-void HUD()
+void AspectRatio()
 {
-    if (bFixHUD) 
+    if (bFixAspect)
     {
         if (eGameType == Game::GZ || eGameType == Game::TPP) {
             // GZ/TPP: Throwable marker
             std::uint8_t* ThrowableMarkerScanResult = Memory::PatternScan(exeModule, "E8 ?? ?? ?? ?? F3 0F ?? ?? ?? ?? 66 0F ?? ?? 66 0F ?? ?? 41 ?? ?? ?? 4C ?? ?? ?? ?? BA 01 00 00 00");
             if (ThrowableMarkerScanResult) {
-                spdlog::info("GZ/TPP: HUD: Throwable Marker: Address is {:s}+{:x}", sExeName.c_str(), ThrowableMarkerScanResult - (std::uint8_t*)exeModule);
+                spdlog::info("GZ/TPP: Throwable Marker: Address is {:s}+{:x}", sExeName.c_str(), ThrowableMarkerScanResult - (std::uint8_t*)exeModule);
                 static SafetyHookMid ThrowableMarkerMidHook{};
                 ThrowableMarkerMidHook = safetyhook::create_mid(ThrowableMarkerScanResult + 0x5,
                     [](SafetyHookContext& ctx) {
@@ -322,13 +325,13 @@ void HUD()
                     });
             }
             else {
-                spdlog::error("GZ/TPP: HUD: Throwable Marker: Pattern scan failed.");
+                spdlog::error("GZ/TPP: Throwable Marker: Pattern scan failed.");
             }
 
             // GZ/TPP: Fix lens effects (flares, dirt etc)
             std::uint8_t* LensEffectsScanResult = Memory::PatternScan(exeModule, "0F 28 ?? F3 ?? 0F ?? ?? ?? ?? ?? ?? F3 45 ?? ?? ?? ?? F3 45 ?? ?? ?? F3 44 ?? ?? ?? ?? E8 ?? ?? ?? ??");
             if (LensEffectsScanResult) {
-                spdlog::info("GZ/TPP: HUD: Lens Effects: Address is {:s}+{:x}", sExeName.c_str(), LensEffectsScanResult - (std::uint8_t*)exeModule);
+                spdlog::info("GZ/TPP: Lens Effects: Address is {:s}+{:x}", sExeName.c_str(), LensEffectsScanResult - (std::uint8_t*)exeModule);
                 static SafetyHookMid LensEffectsMidHook{};
                 LensEffectsMidHook = safetyhook::create_mid(LensEffectsScanResult + 0x3,
                     [](SafetyHookContext& ctx) {
@@ -339,9 +342,34 @@ void HUD()
                     });
             }
             else {
-                spdlog::error("GZ/TPP: HUD: Lens Effects: Pattern scan failed.");
+                spdlog::error("GZ/TPP: Lens Effects: Pattern scan failed.");
             }
 
+            // GZ/TPP: Fix depth of field                                          
+            std::uint8_t* DepthOfFieldScanResult = Memory::PatternScan(exeModule, "0F 5B ?? F3 0F ?? ?? ?? ?? ?? ?? 0F 14 ?? 0F 14 ?? ?? ?? ?? ?? 44 0F ?? ??");
+            if (!DepthOfFieldScanResult) {
+                spdlog::info("GZ/TPP: Depth of Field: Address is {:s}+{:x}", sExeName.c_str(), DepthOfFieldScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid DepthOfFieldMidHook{};
+                DepthOfFieldMidHook = safetyhook::create_mid(DepthOfFieldScanResult + 0x3,
+                    [](SafetyHookContext& ctx) {
+                        if (fAspectRatio > fNativeAspect) {
+                            ctx.xmm6.f32[0] = (fHUDWidth * 0.85f) * (1.00f / 1920.00f);
+                            ctx.xmm4.f32[0] = fHUDWidth;
+                        }
+                    });
+            }
+            else {
+                spdlog::error("GZ/TPP: Depth of Field: Pattern scan failed.");
+            }
+        }
+    }
+}
+
+void HUD()
+{
+    if (bFixHUD) 
+    {
+        if (eGameType == Game::GZ || eGameType == Game::TPP) {
             // GZ/TPP: Span backgrounds
             std::uint8_t* HUDBackgroundsScanResult = nullptr;
             if (eGameType == Game::GZ)
@@ -691,6 +719,7 @@ DWORD __stdcall Main(void*)
     {
         CurrentResolution();
         Resolution();
+        AspectRatio();
         HUD();
         Movies();
         Framerate();
