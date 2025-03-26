@@ -4,9 +4,12 @@
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/MGSVFix/total.svg)](https://github.com/Lyall/MGSVFix/releases)
 
 **MGSVFix** is an ASI plugin for Metal Gear Solid V: The Phantom Pain (and Ground Zeroes!) that can:
-- Unlock resolution options.
-- Fix HUD issues at ultrawide resolutions.
+- Unlock resolution options/support.
 - Unlock framerate.
+- Fix HUD issues at ultrawide resolutions.
+- Fix graphical effects at ultrawide resolutions.
+
+For more details on what is fixed, click [here](https://github.com/Lyall/MGSVFix/blob/main/Fixes.md).
 
 ## Installation  
 - Download the latest release from [here](https://github.com/Lyall/MGSVFix/releases). 
@@ -20,7 +23,7 @@
 - Open **`MGSVFix.ini`** to adjust settings.
 
 ## Screenshots
-|  |
+| ![ezgif-4404660a5886d0](https://github.com/user-attachments/assets/58f40f24-1306-49e7-b4cd-1b90feacd2f3) |
 |:--:|
 | Gameplay |
 
