@@ -9,7 +9,7 @@
 - Fix HUD issues at ultrawide resolutions.
 - Fix graphical effects at ultrawide resolutions.
 
-For more details on exactly what is fixed, click [here](https://github.com/Lyall/MGSVFix/blob/main/Fixes.md).
+For more details on exactly what is fixed, click [here](https://github.com/Lyall/MGSVFix/blob/main/fixes.md).
 
 ## Installation  
 - Download the latest release from [here](https://github.com/Lyall/MGSVFix/releases). 
