@@ -17,7 +17,7 @@ For more details on exactly what is fixed, click [here](https://github.com/Lyall
 
 ### Steam Deck/Linux Additional Instructions
 🚩**You do not need to do this if you are using Windows!**  
-- Open the game properties in Steam and add `WINEDLLOVERRIDES="dinput8=n,b" %command%` to the launch options.  
+- Open the game properties in Steam and add `WINEDLLOVERRIDES="winmm=n,b" %command%` to the launch options.  
 
 ## Configuration
 - Open **`MGSVFix.ini`** to adjust settings.

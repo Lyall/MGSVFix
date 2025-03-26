@@ -7,4 +7,4 @@
   
 ### Steam Deck/Linux Additional Instructions
 🚩**You do not need to do this if you are using Windows!**
-- Open up the game properties in Steam and add `WINEDLLOVERRIDES="dinput8=n,b" %command%` to the launch options.  
+- Open up the game properties in Steam and add `WINEDLLOVERRIDES="winmm=n,b" %command%` to the launch options.  
