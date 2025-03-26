@@ -21,7 +21,7 @@ body:
     attributes:
       label: "Game"
       description: "Which game is the issue occurring in?"
-      placeholder: "e.g., Ground Zeroes, The Phantom Pain"
+      placeholder: "e.g., Ground Zeroes"
     validations:
       required: true
 
