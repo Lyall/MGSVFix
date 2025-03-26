@@ -271,11 +271,15 @@ void Resolution()
 
         if (eGameType == Game::GZ) {
             // GZ: Remove HWND_TOPMOST flag for borderless mode
-            std::uint8_t* BorderlessTopMostScanResult = Memory::PatternScan(exeModule, "48 ?? ?? FF 85 ?? 8B ?? ?? 74 ?? 44 ?? ?? ?? ?? 44 ?? ?? ?? ??");
+            std::uint8_t* BorderlessTopMostScanResult = Memory::PatternScan(exeModule, "C7 44 ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8B ?? ?? 89 ?? ?? ?? FF ?? ?? ?? ?? ?? E9 ?? ?? ?? ??");
             if (BorderlessTopMostScanResult) {
                 spdlog::info("GZ: Borderless TopMost: Address is {:s}+{:x}", sExeName.c_str(), BorderlessTopMostScanResult - (std::uint8_t*)exeModule);
-                Memory::PatchBytes(BorderlessTopMostScanResult + 0x2, "\xF2", 1); // or -> xor the HWND_TOPMOST flag
-                spdlog::info("GZ: Borderless TopMost: Patched instruction.");
+                static SafetyHookMid BorderlessTopMostMidHook{};
+                BorderlessTopMostMidHook = safetyhook::create_mid(BorderlessTopMostScanResult + 0x8,
+                    [](SafetyHookContext& ctx) {
+                        if (ctx.rdx == (uintptr_t)HWND_TOPMOST)
+                            ctx.rdx = (uintptr_t)HWND_NOTOPMOST;
+                    });
             }
             else {
                 spdlog::error("GZ: Borderless TopMost: Pattern scan failed.");
@@ -532,7 +536,12 @@ void Movies()
             std::uint8_t* MovieFrameScanResult = Memory::PatternScan(exeModule, "72 ?? 44 0F ?? ?? 72 ?? 41 0F ?? ?? F3 41 ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 76 ??");
             if (MovieFrameScanResult) {
                 spdlog::info("TPP: HUD: Movie Frame: Address is {:s}+{:x}", sExeName.c_str(), MovieFrameScanResult - (std::uint8_t*)exeModule);
-                Memory::PatchBytes(MovieFrameScanResult, "\xEB", 1);
+                static SafetyHookMid MovieFrameMidHook{};
+                MovieFrameMidHook = safetyhook::create_mid(MovieFrameScanResult,
+                    [](SafetyHookContext& ctx) {
+                        if (fAspectRatio > fNativeAspect)
+                            ctx.rflags |= (1ULL << 0); // Set CF
+                    });
             }
             else {
                 spdlog::error("TPP: HUD: Movie Frame: Pattern scan failed.");
