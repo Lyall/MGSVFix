@@ -4,8 +4,7 @@
 
 ## Borderless Mode  
 
-When **borderless windowed mode** is enabled, the game sets the `HWND_TOPMOST` flag using [`SetWindowPos`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowpos).  
-This forces the window to always stay on top when attempting to **ALT+TAB**, making the borderless mode a bit pointless.  
+When **borderless windowed mode** is enabled, the game sets the `HWND_TOPMOST` flag using [`SetWindowPos`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowpos). This forces the window to always stay on top when attempting to **ALT+TAB**, making the borderless mode less than useful.  
 
 ![flags](https://github.com/user-attachments/assets/35185a31-52dd-4970-aba5-d2c54860edc3)  
 
