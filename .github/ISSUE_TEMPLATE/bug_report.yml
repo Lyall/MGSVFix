@@ -12,7 +12,7 @@ body:
     attributes:
       label: "Version Number"
       description: "Which version of MGSVFix are you using? (Check the release name or `MGSVFix.log`)"
-      placeholder: "e.g., v0.0.1"
+      placeholder: "e.g. v0.0.1"
     validations:
       required: true
 
@@ -21,7 +21,7 @@ body:
     attributes:
       label: "Game"
       description: "Which game is the issue occurring in?"
-      placeholder: "e.g., Ground Zeroes"
+      placeholder: "e.g. Ground Zeroes"
     validations:
       required: true
 
