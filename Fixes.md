@@ -29,7 +29,7 @@ https://github.com/user-attachments/assets/a6497b1f-1e48-48e7-a846-4bab1c781036
 
 # The Phantom Pain
 
-Each issue listed below is address by MGSVFix.
+Each issue listed below is addressed by MGSVFix.
 
 ### Unlock Resolutions
 
