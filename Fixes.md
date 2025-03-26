@@ -39,6 +39,22 @@ Both *The Phantom Pain* and *Ground Zeroes* only support resolutions that are 16
 
 ## Ultrawide
 
+### Depth of Field
+
+Depth of field is exaggerated at ultrawide resolutions. This can be a little hard to see in a static comparison, and is much easier to see in motion.
+
+![ezgif-785274e5eb8365](https://github.com/user-attachments/assets/c25eabe5-6352-4cf9-ace9-b06b3c830739)
+
+### Lens Flares/Effects
+
+At ultrawide resolutions lens flares are exaggerated and over-sized.
+
+![ezgif-7dbb5d44a73a02](https://github.com/user-attachments/assets/49ba2854-d9c9-42ba-9696-4a105de05ca1)
+
+This is especially noticable in the opening of *Ground Zeroes*.
+
+![ezgif-7afcd7c6e344e8](https://github.com/user-attachments/assets/f6d72eb7-670f-441d-b546-fb0ea708623c)
+
 ### Overlays
 
 Several overlays, such as the one shown when using the sonar, are scaled incorrectly.
