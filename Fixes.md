@@ -1,6 +1,6 @@
 # Ground Zeroes
 
-*Ground Zeroes* shares a lot of similar issues with *The Phantom Pain*, they will be covered in that section. Below are a few fixed issues that are specific to *Ground Zeroes*.
+*Ground Zeroes* shares a lot of issues with *The Phantom Pain*, they will be covered in that section. Below are a few fixed issues that are specific to *Ground Zeroes*.
 
 ## Borderless Mode  
 
