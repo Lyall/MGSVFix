@@ -93,7 +93,7 @@ Several menu backgrounds do not span to fill the screen.
 
 ### Movies
 
-While FMV sections in *The Phantom Pain* are pretty rare, they display incorrectly on an ultrawide display. The video itself is stretched to span the screen. A 16:9 video frame is then drawn over the top.
+While FMV sections in *The Phantom Pain* are pretty rare, they display incorrectly at ultrawide resolutions. The video itself is stretched to span the screen and a 16:9 video frame is then drawn over the top.
 
 ![ezgif-7503f2076a3d8b](https://github.com/user-attachments/assets/f0ed7293-b971-41a3-ab21-54e8d0d263cf)
 
