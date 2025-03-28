@@ -22,6 +22,10 @@ For more details on exactly what is fixed, click [here](https://github.com/Lyall
 ## Configuration
 - Open **`MGSVFix.ini`** to adjust settings.
 
+## Known Issues
+#### Ultrawide
+- Certain lens effects like lens dirt are displayed at 16:9.
+
 ## Screenshots
 | ![ezgif-4404660a5886d0](https://github.com/user-attachments/assets/58f40f24-1306-49e7-b4cd-1b90feacd2f3) |
 |:--:|
