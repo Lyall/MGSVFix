@@ -13,7 +13,7 @@ HMODULE thisModule;
 
 // Fix details
 std::string sFixName = "MGSVFix";
-std::string sFixVersion = "0.0.1";
+std::string sFixVersion = "0.0.2";
 std::filesystem::path sFixPath;
 
 // Ini
@@ -306,6 +306,22 @@ void Resolution()
     } 
 }
 
+void IntroSkip()
+{
+    if (eGameType == Game::TPP) {
+        // TPP: Intro logos
+        std::uint8_t* IntroLogosScanResult = Memory::PatternScan(exeModule, "C6 ?? ?? ?? ?? ?? 01 C7 ?? ?? ?? ?? ?? 00 00 00 00 E8 ?? ?? ?? ?? C7 ?? 00 00 00 00 48 89 ??");
+        if (IntroLogosScanResult) { 
+            spdlog::info("TPP: Intro Logos: Address is {:s}+{:x}", sExeName.c_str(), IntroLogosScanResult - (std::uint8_t*)exeModule);
+            Memory::PatchBytes(IntroLogosScanResult + 0x6, "\x05", 1);
+            spdlog::info("TPP: Intro Logos: Patched instruction.");
+        }
+        else {
+            spdlog::error("TPP: Intro Logos: Pattern scan failed.");
+        }
+    }
+}
+
 void AspectRatio()
 {
     if (bFixAspect)
@@ -472,6 +488,28 @@ void HUD()
                 spdlog::error("TPP: HUD: Markers: Pattern scan failed.");
             }
 
+            // TPP: Marker constraint
+            std::uint8_t* MarkerConstraintScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 77 ?? F3 0F ?? ?? ?? ?? ?? ?? 0F ?? ?? 73 ?? 0F ?? ?? E8 ?? ?? ?? ??");
+            if (MarkerConstraintScanResult) {
+                spdlog::info("TPP: HUD: Marker Constraint: Address is {:s}+{:x}", sExeName.c_str(), MarkerConstraintScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid MarkerConstraintRightMidHook{};
+                MarkerConstraintRightMidHook = safetyhook::create_mid(MarkerConstraintScanResult + 0x8,
+                    [](SafetyHookContext& ctx) {
+                        if (fAspectRatio > fNativeAspect)
+                            ctx.xmm0.f32[0] *= fAspectMultiplier;
+                    });
+
+                static SafetyHookMid MarkerConstraintLeftMidHook{};
+                MarkerConstraintLeftMidHook = safetyhook::create_mid(MarkerConstraintScanResult + 0x15,
+                    [](SafetyHookContext& ctx) {
+                        if (fAspectRatio > fNativeAspect)
+                            ctx.xmm0.f32[0] *= fAspectMultiplier;
+                    });
+            }
+            else {
+                spdlog::error("TPP: HUD: Marker Constraint: Pattern scan failed.");
+            }
+
             // TPP: Fix various overlays
             std::vector<std::uint8_t*> OverlayScanResult = Memory::PatternScanAll(exeModule, "F3 0F ?? ?? ?? ?? ?? ?? C7 44 ?? ?? 00 00 80 BF C7 44 ?? ?? 00 00 80 3F");
             if (!OverlayScanResult.empty() && OverlayScanResult.size() == 3) {
@@ -588,16 +626,57 @@ void Framerate()
             std::uint8_t* FramerateSettingScanResult = Memory::PatternScan(exeModule, "48 33 ?? ?? ?? ?? ?? 49 85 ?? 48 0F ?? ?? ?? ?? ?? ?? 48 89 ?? ?? ?? ??");
             std::uint8_t* FramerateTargetScanResult = Memory::PatternScan(exeModule, "49 85 ?? 75 ?? F2 0F 10 0D ?? ?? ?? ??");
             if (FramerateSettingScanResult && FramerateTargetScanResult) { 
-                spdlog::info("GZ/TPP: Variable Framerate: Setting: Address is {:s}+{:x}", sExeName.c_str(), FramerateSettingScanResult - (std::uint8_t*)exeModule);
+                spdlog::info("GZ/TPP: Framerate: Setting: Address is {:s}+{:x}", sExeName.c_str(), FramerateSettingScanResult - (std::uint8_t*)exeModule);
                 Memory::PatchBytes(FramerateSettingScanResult, "\x48\x31\xC0\x90\x90\x90\x90", 7); // xor rax, rax
-                spdlog::info("GZ/TPP: Variable Framerate: Setting: Patched instruction.");
+                spdlog::info("GZ/TPP: Framerate: Setting: Patched instruction.");
 
-                spdlog::info("GZ/TPP: Variable Framerate: Target: Address is {:s}+{:x}", sExeName.c_str(), FramerateTargetScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid TimerResolutionMidHook{};
+                TimerResolutionMidHook = safetyhook::create_mid(FramerateSettingScanResult,
+                    [](SafetyHookContext& ctx) {
+                        typedef NTSTATUS(NTAPI* _NtSetTimerResolution)(ULONG DesiredResolution, BOOLEAN SetResolution, PULONG CurrentResolution);
+                        _NtSetTimerResolution NtSetTimerResolution;
+    
+                        HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+                        if (ntdll) {
+                            FARPROC NtSetTimerResolution_fn = GetProcAddress(ntdll, "NtSetTimerResolution");
+                            if (NtSetTimerResolution_fn) {
+                                NtSetTimerResolution = (_NtSetTimerResolution)NtSetTimerResolution_fn;
+                            }
+                        }
+    
+                        if (NtSetTimerResolution) {
+                            ULONG currentRes;
+                            NTSTATUS status = NtSetTimerResolution(5000, TRUE, &currentRes);
+                            
+                            if (status == 0) {
+                                spdlog::info("GZ/TPP: Timer: Set timer resolution to 0.5ms");
+                            }
+                        }
+    
+                    });
+
+                spdlog::info("GZ/TPP: Framerate: Target: Address is {:s}+{:x}", sExeName.c_str(), FramerateTargetScanResult - (std::uint8_t*)exeModule);
                 Memory::PatchBytes(FramerateTargetScanResult + 0x3, "\xEB", 1); // jmp
-                spdlog::info("GZ/TPP: Variable Framerate: Target: Patched instruction.");
+                spdlog::info("GZ/TPP: Framerate: Target: Patched instruction.");
             }
             else {
-                spdlog::error("GZ/TPP: Variable Framerate: Pattern scan(s) failed.");
+                spdlog::error("GZ/TPP: Framerate: Pattern scan(s) failed.");
+            }
+
+            // GZ/TPP: Thread sleep
+            std::uint8_t* ThreadSleepScanResult = Memory::PatternScan(exeModule, "48 ?? ?? 48 85 ?? 75 ?? 8D ?? 01 48 8D ?? ?? ??");
+            if (ThreadSleepScanResult) { 
+                spdlog::info("GZ/TPP: Thread Sleep: Address is {:s}+{:x}", sExeName.c_str(), ThreadSleepScanResult - (std::uint8_t*)exeModule);
+                static SafetyHookMid ThreadSleepMidHook{};
+                ThreadSleepMidHook = safetyhook::create_mid(ThreadSleepScanResult + 0xB,
+                    [](SafetyHookContext& ctx) {
+                        // "MainThrd"
+                        if (ctx.rbp == 0x01)
+                            ctx.rdx = 0;
+                    });
+            }
+            else {
+                spdlog::error("GZ/TPP: Thread Sleep: Pattern scan failed.");
             }
         }
 
@@ -605,12 +684,12 @@ void Framerate()
             // GZ: Fix freezing bug with throwables when using variable framerate
             std::uint8_t* ThrowableBugScanResult = Memory::PatternScan(exeModule, "F2 0F 59 ?? ?? ?? ?? ?? 66 0F ?? ?? F7 ?? ?? ?? ?? ?? 00 01 00 00 74 ??");
             if (ThrowableBugScanResult) { 
-                spdlog::info("GZ: Throwable Framerate Bug: Address is {:s}+{:x}", sExeName.c_str(), ThrowableBugScanResult - (std::uint8_t*)exeModule);
+                spdlog::info("GZ: Framerate: Throwable Framerate Bug: Address is {:s}+{:x}", sExeName.c_str(), ThrowableBugScanResult - (std::uint8_t*)exeModule);
                 Memory::PatchBytes(ThrowableBugScanResult, "\xF2\x0F\x59\x40\x30\x90\x90\x90", 8); // mulsd xmm0,[7FF677CA9C00] (fixed 60fps frametime) -> mulsd xmm0, [rax+30] (current frametime)
-                spdlog::info("GZ: Throwable Framerate Bug: Patched instruction.");
+                spdlog::info("GZ: Framerate: Throwable Framerate Bug: Patched instruction.");
             }
             else {
-                spdlog::error("GZ: Throwable Framerate Bug: Pattern scan failed.");
+                spdlog::error("GZ: Framerate: Throwable Framerate Bug: Pattern scan failed.");
             }
         }
     }
@@ -677,6 +756,7 @@ DWORD __stdcall Main(void*)
     {
         CurrentResolution();
         Resolution();
+        //IntroSkip();
         AspectRatio();
         HUD();
         Movies();
