@@ -7,3 +7,4 @@
 #include <fstream>
 #include <filesystem>
 #include <vector>
+#include <winternl.h>
